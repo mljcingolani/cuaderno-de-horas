@@ -137,6 +137,11 @@ nav.tabs button[aria-current="page"]{color:var(--ink);background:var(--ink-soft)
     <span class="small">Queda un ícono en la pantalla y funciona sin internet.</span>
     <button class="primary" id="btnInstalar" style="min-height:56px;font-size:1.1rem">Instalar</button>
   </div>
+  <div id="driveBox" class="aviso" hidden style="margin-bottom:12px">
+    <strong id="driveTxt"></strong>
+    <span class="small">¿Querés cargarlos en este teléfono?</span>
+    <div class="row"><button class="primary" style="flex:1;min-height:52px;font-size:1rem" id="driveSi">Sí, cargarlos</button><button id="driveNo">No</button></div>
+  </div>
   <div id="copiaBox" class="aviso warn" hidden style="margin-bottom:12px">
     <strong id="copiaTxt"></strong>
     <span class="small">Mandale la planilla a Mario por WhatsApp para tener una copia.</span>
@@ -191,6 +196,11 @@ nav.tabs button[aria-current="page"]{color:var(--ink);background:var(--ink-soft)
   <!-- EXCEL -->
   <section id="v-excel" class="stack" hidden>
     <div class="paso">
+      <h2>Copia automática en Google Drive</h2>
+      <p style="margin:0;font-weight:700" id="dInfo"></p>
+      <p class="small muted" style="margin:0">Cada vez que cargás algo, la app manda sola una copia a la planilla de Google Drive de Mario. No hace falta tocar nada.</p>
+    </div>
+    <div class="paso">
       <h2>Mandar la planilla</h2>
       <p class="muted" style="margin:0" id="xInfo"></p>
       <button class="primary" id="xMandar">Mandar planilla Excel</button>
@@ -198,13 +208,17 @@ nav.tabs button[aria-current="page"]{color:var(--ink);background:var(--ink-soft)
       <button class="full" id="xBajar">Guardar en el teléfono (Descargas)</button>
     </div>
     <div class="paso">
-      <h2>Recuperar desde Excel</h2>
+      <h2>Recuperar los datos</h2>
+      <p class="small muted" style="margin:0">Si cambiás de teléfono o se borraron los datos, la app vuelve a cargar todo desde Drive.</p>
+      <button class="full" id="dRecuperar">Recuperar desde Google Drive</button>
+      <div id="dConfirm"></div>
+      <h2 style="margin-top:8px">Recuperar desde Excel</h2>
       <p class="small muted" style="margin:0">Si cambiás de teléfono o se borraron los datos, elegí la última planilla que mandaste o guardaste y la app vuelve a cargar todo.</p>
       <label class="btn full" for="xArchivo" style="display:flex">Elegir planilla</label>
       <input type="file" id="xArchivo" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
       <div id="xConfirm"></div>
     </div>
-    <p class="small muted">Los datos se guardan en este teléfono, aunque no haya internet.</p>
+    <p class="small muted">Los datos se guardan en este teléfono aunque no haya internet, y la copia se sube a Drive cuando vuelve la conexión.</p>
   </section>
 </div>
 
@@ -220,7 +234,8 @@ nav.tabs button[aria-current="page"]{color:var(--ink);background:var(--ink-soft)
 const KEY='cuadernoHoras_v1';
 let D={clientas:[],registros:[],precioBase:0,ultimaDescarga:null};
 try{const s=localStorage.getItem(KEY); if(s) D=Object.assign(D,JSON.parse(s));}catch(e){}
-function guardar(){setTimeout(pintarAvisos,0);try{localStorage.setItem(KEY,JSON.stringify(D));return true}catch(e){toast('No se pudo guardar en este teléfono. Descargá el Excel.');return false}}
+function persistir(){try{localStorage.setItem(KEY,JSON.stringify(D));return true}catch(e){return false}}
+function guardar(){setTimeout(pintarAvisos,0);const ok=persistir();if(!ok)toast('No se pudo guardar en este teléfono. Descargá el Excel.');programarDrive();return ok}
 
 const $=id=>document.getElementById(id);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
@@ -422,7 +437,7 @@ $('xBajar').onclick=()=>{if(!D.registros.length){toast('Todavía no hay horas pa
 /* Aviso de copia: si pasaron 7 días o más desde la última */
 function pintarAvisos(){
   const n=D.registros.length;let dias=null;
-  if(D.ultimaDescarga)dias=Math.floor((deISO(iso(new Date()))-deISO(D.ultimaDescarga))/864e5);
+  const ult=[D.ultimaDescarga,D.ultimaDrive?iso(new Date(D.ultimaDrive)):null].filter(Boolean).sort().pop();if(ult)dias=Math.floor((deISO(iso(new Date()))-deISO(ult))/864e5);
   const mostrar=n>=3&&(dias===null||dias>=7);
   $('copiaBox').hidden=!mostrar;
   if(mostrar)$('copiaTxt').textContent=dias===null?'Todavía no hiciste ninguna copia':`Hace ${dias} días que no hacés una copia`;
@@ -461,17 +476,72 @@ $('xConfirm').addEventListener('click',e=>{
   if(e.target.id==='xNo'){pendiente=null;$('xConfirm').innerHTML=''}
 });
 
+/* ---------- COPIA AUTOMÁTICA EN GOOGLE DRIVE ---------- */
+const pl=(n,a,b)=>`${n} ${n===1?a:b}`;
+const DRIVE_URL='https://script.google.com/macros/s/AKfycbycUFdIGjktfB0ckD0OZmitFjIBKCwMGv09dxM_IOP0_jVrKz4TzjkGXRDKz9hOB0hfpQ/exec';
+const CLAVE_DRIVE='dVApBQskP9SogJPzui4JY8Hg';
+let driveT=null,driveOcupado=false,driveError=false;
+function programarDrive(){D.cambios=(D.cambios||0)+1;D.drivePendiente=true;persistir();clearTimeout(driveT);driveT=setTimeout(subirDrive,2500);pintarDrive()}
+async function subirDrive(){
+  if(!D.drivePendiente||driveOcupado)return;
+  if(navigator.onLine===false){pintarDrive();return}
+  driveOcupado=true;pintarDrive();
+  const marca=D.cambios||0;
+  const cuerpo=JSON.stringify({clave:CLAVE_DRIVE,datos:{clientas:D.clientas,registros:D.registros}});
+  let ok=false;
+  try{const r=await fetch(DRIVE_URL,{method:'POST',body:cuerpo});const j=await r.json();ok=!!(j&&j.ok)}catch(e){ok=false}
+  driveOcupado=false;driveError=!ok;
+  if(ok){D.ultimaDrive=new Date().toISOString();if((D.cambios||0)===marca)D.drivePendiente=false;persistir();pintarAvisos()}
+  clearTimeout(driveT);
+  if(D.drivePendiente)driveT=setTimeout(subirDrive,ok?2500:60000);
+  pintarDrive();
+}
+function pintarDrive(){
+  const el=$('dInfo');if(!el)return;
+  const hora=D.ultimaDrive?new Date(D.ultimaDrive):null;
+  const txtHora=hora?`${pad(hora.getDate())}/${pad(hora.getMonth()+1)} a las ${pad(hora.getHours())}:${pad(hora.getMinutes())}`:'';
+  if(driveOcupado)el.textContent='Subiendo la copia…';
+  else if(D.drivePendiente)el.textContent=(navigator.onLine===false||driveError?'Sin conexión: la copia se sube sola cuando vuelva internet.':'Subiendo la copia en unos segundos…')+(txtHora?` Última copia: ${txtHora}.`:'');
+  else el.textContent=txtHora?`Copia al día. Última: ${txtHora}.`:'Todavía no se mandó ninguna copia.';
+  el.style.color=D.drivePendiente&&!driveOcupado&&(driveError||navigator.onLine===false)?'var(--warn)':'var(--wa)';
+}
+window.addEventListener('online',subirDrive);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')subirDrive()});
+
+let desdeDrive=null;
+async function traerDrive(){const r=await fetch(DRIVE_URL+'?clave='+encodeURIComponent(CLAVE_DRIVE));const j=await r.json();if(!j||!j.ok)throw new Error('drive');return j.datos}
+function cargarDesdeDrive(d){D.clientas=d.clientas||[];D.registros=d.registros||[];D.drivePendiente=false;D.ultimaDrive=new Date().toISOString();persistir();pintarChips();pintarExcel();pintarDrive();pintarAvisos();toast('Datos recuperados desde Drive')}
+$('dRecuperar').onclick=async()=>{
+  toast('Buscando en Drive…');
+  try{desdeDrive=await traerDrive();
+    $('dConfirm').innerHTML=`<div class="confirmbox"><strong>En Drive hay ${pl(desdeDrive.registros.length,'día','días')} de ${pl(desdeDrive.clientas.length,'clienta','clientas')}.</strong><span class="small">Esto reemplaza lo que hay ahora en el teléfono.</span><div class="row"><button class="danger" style="flex:1" id="dSi">Reemplazar</button><button id="dNo">Cancelar</button></div></div>`;
+  }catch(e){toast('No se pudo conectar con Drive. Revisá internet.')}
+};
+$('dConfirm').addEventListener('click',e=>{
+  if(e.target.id==='dSi'&&desdeDrive){cargarDesdeDrive(desdeDrive);desdeDrive=null;$('dConfirm').innerHTML=''}
+  if(e.target.id==='dNo'){desdeDrive=null;$('dConfirm').innerHTML=''}
+});
+/* Teléfono nuevo o vacío: ofrecer los datos que ya están en Drive */
+async function ofrecerDrive(){
+  if(D.clientas.length||D.registros.length||D.driveOfrecido)return;
+  try{const d=await traerDrive();if(!d.registros.length)return;desdeDrive=d;
+    $('driveTxt').textContent=`Encontramos ${pl(d.registros.length,'día','días')} de ${pl(d.clientas.length,'clienta','clientas')} guardados en Google Drive.`;$('driveBox').hidden=false}catch(e){}
+}
+$('driveSi').onclick=()=>{if(desdeDrive)cargarDesdeDrive(desdeDrive);desdeDrive=null;$('driveBox').hidden=true};
+$('driveNo').onclick=()=>{D.driveOfrecido=true;persistir();desdeDrive=null;$('driveBox').hidden=true};
+
 /* ---------- NAVEGACIÓN ---------- */
 function mostrar(v){
   ['cargar','cuentas','clienta','excel'].forEach(x=>$('v-'+x).hidden=x!==v);
   const tab=v==='clienta'?'cuentas':v;
   document.querySelectorAll('nav.tabs button').forEach(b=>{if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
-  if(v==='cuentas')pintarCuentas();if(v==='clienta')pintarClienta();if(v==='excel')pintarExcel();pintarAvisos();
+  if(v==='cuentas')pintarCuentas();if(v==='clienta')pintarClienta();if(v==='excel'){pintarExcel();pintarDrive()}pintarAvisos();
   window.scrollTo(0,0);
 }
 document.querySelector('nav.tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)mostrar(b.dataset.tab)});
 
-pintarChips();pintarFecha();pintarHoras();pintarPrecio();pintarAvisos();
+pintarChips();pintarFecha();pintarHoras();pintarPrecio();pintarAvisos();pintarDrive();
+if(D.drivePendiente)setTimeout(subirDrive,1500);ofrecerDrive();
 })();
 </script>
 </body>
