@@ -1,0 +1,29 @@
+CUADERNO DE HORAS — APP PARA EL TELÉFONO
+Se publica una sola vez en GitHub Pages (gratis). Después ella la instala desde el teléfono.
+
+A) PUBLICAR (desde la computadora)
+1. Entrá a github.com y creá una cuenta (o iniciá sesión).
+2. Arriba a la derecha: "+" > New repository.
+   Nombre: cuaderno-de-horas   ·  Public  ·  Create repository.
+3. En la página nueva tocá "uploading an existing file".
+   Arrastrá TODO el contenido de esta carpeta (index.html, sw.js, manifest.webmanifest,
+   xlsx.full.min.js y las carpetas icons y fonts). Tocá "Commit changes".
+4. Settings > Pages > Branch: main / (root) > Save.
+   En 1 o 2 minutos aparece la dirección, del estilo:
+   https://TU-USUARIO.github.io/cuaderno-de-horas/
+
+B) INSTALAR EN EL TELÉFONO DE ELLA (Android)
+1. Mandale esa dirección por WhatsApp y que la abra con Chrome.
+2. Aparece un cartel "Instalá la app en el teléfono" > Instalar.
+   (Si no aparece: menú ⋮ > "Instalar app" o "Agregar a pantalla principal".)
+3. Listo: queda el ícono "Mis Horas". Desde ahí funciona sin internet.
+
+C) COPIAS
+- En la pestaña Excel, "Mandar planilla Excel" abre WhatsApp/Drive para mandar la planilla.
+- La app avisa si pasa una semana sin hacer copia.
+- Si cambia de teléfono: instalar la app de nuevo y en Excel > "Recuperar desde Excel".
+
+D) SI ALGÚN DÍA SE CAMBIA LA APP
+Subí los archivos nuevos al mismo repositorio y en sw.js cambiá 'cuaderno-v1' por
+'cuaderno-v2'. El teléfono se actualiza solo la próxima vez que abra la app con internet.
+Los datos cargados no se pierden.

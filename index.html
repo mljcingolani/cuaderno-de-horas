@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cuaderno de Horas</title>
+<meta name="theme-color" content="#2445b5">
+<meta name="description" content="Anotá las horas trabajadas, calculá lo que hay que cobrar y mandá la cuenta por WhatsApp.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-180.png">
+<script src="xlsx.full.min.js"></script>
+<style>
+@font-face{font-family:"Baloo 2";font-weight:700;font-display:swap;src:url(fonts/baloo-2-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Baloo 2";font-weight:600;font-display:swap;src:url(fonts/baloo-2-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Nunito";font-weight:400;font-display:swap;src:url(fonts/nunito-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Nunito";font-weight:600;font-display:swap;src:url(fonts/nunito-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Nunito";font-weight:700;font-display:swap;src:url(fonts/nunito-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Nunito";font-weight:800;font-display:swap;src:url(fonts/nunito-latin-800-normal.woff2) format("woff2")}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;padding-top:env(safe-area-inset-top,0px)}
+img{max-width:100%}
+.aviso{display:grid;gap:10px;padding:14px 16px;border-radius:16px;background:var(--ink-soft);border:1px solid var(--ink)}
+.aviso.warn{background:var(--warn-soft);border-color:var(--warn)}
+.aviso strong{font-family:var(--f-display);font-size:1.15rem}
+/* Layout: una columna tipo cuaderno, botones grandes, barra de pestañas fija abajo */
+:root{
+  --paper:#f4f6fb; --card:#ffffff; --text:#1b2233; --muted:#5b6478; --line:#dde2ee;
+  --ink:#2445b5; --ink-soft:#e6ecff; --wa:#168a4a; --wa-soft:#e3f5ea; --warn:#b4401a; --warn-soft:#fdebe4;
+  --rule:rgba(36,69,181,.07);
+  --f-display:"Baloo 2", "Trebuchet MS", system-ui, sans-serif;
+  --f-body:"Nunito", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#11151e; --card:#1a2030; --text:#e9ecf4; --muted:#a0a8bb; --line:#2c3447;
+  --ink:#93abff; --ink-soft:#232e4d; --wa:#3cc87a; --wa-soft:#17301f; --warn:#ff9a76; --warn-soft:#3a2219;
+  --rule:rgba(147,171,255,.06); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#11151e; --card:#1a2030; --text:#e9ecf4; --muted:#a0a8bb; --line:#2c3447;
+  --ink:#93abff; --ink-soft:#232e4d; --wa:#3cc87a; --wa-soft:#17301f; --warn:#ff9a76; --warn-soft:#3a2219;
+  --rule:rgba(147,171,255,.06); color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--paper);color:var(--text);font-family:var(--f-body);font-size:18px;line-height:1.45;
+  background-image:repeating-linear-gradient(to bottom,transparent 0 31px,var(--rule) 31px 32px)}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px;padding-block:12px 120px}
+header.top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-block:8px 4px}
+h1{font-family:var(--f-display);font-size:1.9rem;margin:0;color:var(--ink);line-height:1.1}
+.hoy{color:var(--muted);font-size:.95rem}
+h2{font-family:var(--f-display);font-size:1.3rem;margin:0;line-height:1.2;text-wrap:balance}
+.paso{display:grid;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}
+.stack{display:grid;gap:14px;margin-top:12px}
+.muted{color:var(--muted)}
+.small{font-size:.9rem}
+
+button,.btn{font:inherit;font-weight:700;border-radius:14px;border:2px solid var(--line);background:var(--card);color:var(--text);
+  min-height:52px;padding:8px 16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;text-align:center}
+button:focus-visible,.btn:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.primary{background:var(--ink);border-color:var(--ink);color:var(--card);width:100%;min-height:64px;font-size:1.25rem}
+.wa{background:var(--wa);border-color:var(--wa);color:#fff;width:100%;min-height:64px;font-size:1.2rem}
+:root[data-theme="dark"] .wa{color:#0d1a12}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .wa{color:#0d1a12}}
+.ghost{background:transparent}
+.danger{border-color:var(--warn);color:var(--warn);background:var(--warn-soft)}
+.full{width:100%}
+
+.chips{display:flex;flex-wrap:wrap;gap:10px}
+.chip{min-height:52px;padding:6px 18px;border-radius:999px}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--card)}
+.chip.nueva{border-style:dashed;color:var(--ink)}
+.chip.h{min-width:56px;padding:6px 12px}
+
+label{font-weight:700;display:grid;gap:6px}
+input{font:inherit;font-size:1.1rem;padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:var(--paper);color:var(--text);width:100%;min-height:52px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row > input{flex:1 1 160px;width:auto}
+
+.stepper{display:grid;grid-template-columns:72px 1fr 72px;gap:10px;align-items:center}
+.stepper button{min-height:64px;font-size:1.4rem}
+.stepper output{text-align:center;font-family:var(--f-display);font-size:clamp(1.5rem,7vw,2.2rem);color:var(--ink);line-height:1.1;white-space:nowrap}
+
+.total{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:14px 16px;border-radius:16px;background:var(--ink-soft)}
+.total strong{font-family:var(--f-display);font-size:2rem;white-space:nowrap;color:var(--ink);font-variant-numeric:tabular-nums}
+.total span{font-weight:700}
+
+/* Cuentas */
+.cuenta{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;width:100%;text-align:left;padding:14px 16px;border-radius:16px;min-height:76px}
+.cuenta .n{font-family:var(--f-display);font-size:1.35rem;line-height:1.1}
+.cuenta .m{font-family:var(--f-display);font-size:1.35rem;color:var(--ink);font-variant-numeric:tabular-nums;text-align:right}
+.cuenta .d{color:var(--muted);font-weight:600;font-size:.95rem;grid-column:1/-1}
+.cuenta.aldia .m{color:var(--muted)}
+.pill{display:inline-block;font-size:.8rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:2px 10px;border-radius:999px;background:var(--wa-soft);color:var(--wa)}
+.pill.pend{background:var(--warn-soft);color:var(--warn)}
+
+.dias{display:grid;gap:0;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--card)}
+.dia{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:10px 12px 10px 16px;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.dia:first-child{border-top:0}
+.dia .f{font-weight:700;text-transform:capitalize;min-width:0}
+.dia .f small{display:block;font-weight:600;color:var(--muted);text-transform:none}
+.dia .p{font-weight:800}
+.dia .x{min-height:44px;min-width:44px;padding:0;border-color:transparent;color:var(--muted);background:transparent}
+.dia.confirm{grid-template-columns:1fr;background:var(--warn-soft)}
+.dia.confirm .row button{flex:1}
+.sumario{display:flex;justify-content:space-between;padding:12px 16px;font-weight:800;background:var(--ink-soft);font-variant-numeric:tabular-nums}
+
+.msg{white-space:pre-wrap;background:var(--wa-soft);border-radius:16px 16px 16px 4px;padding:12px 14px;font-size:.95rem;border:1px solid var(--line)}
+.confirmbox{display:grid;gap:10px;padding:14px;border-radius:16px;background:var(--warn-soft);border:1px solid var(--warn)}
+details{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 16px}
+details summary{font-weight:800;cursor:pointer;min-height:32px}
+details[open] summary{margin-bottom:10px}
+.vacio{text-align:center;padding:28px 16px;border:2px dashed var(--line);border-radius:18px;color:var(--muted)}
+.vacio b{color:var(--text);display:block;font-family:var(--f-display);font-size:1.25rem;margin-bottom:4px}
+.back{border-color:transparent;background:transparent;color:var(--ink);padding-left:0;min-height:44px}
+
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(3,1fr);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));z-index:5}
+nav.tabs button{border:0;background:transparent;flex-direction:column;gap:2px;min-height:60px;font-size:.95rem;color:var(--muted);border-radius:12px}
+nav.tabs button svg{width:26px;height:26px}
+nav.tabs button[aria-current="page"]{color:var(--ink);background:var(--ink-soft)}
+#toast{position:fixed;left:16px;right:16px;bottom:calc(92px + env(safe-area-inset-bottom,0px));max-width:528px;margin:0 auto;background:var(--text);color:var(--paper);
+  padding:14px 16px;border-radius:14px;font-weight:700;text-align:center;z-index:9;transition:opacity .2s}
+@media (prefers-reduced-motion: reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Cuaderno de Horas</h1>
+    <span class="hoy" id="hoyTxt"></span>
+  </header>
+
+  <!-- CARGAR -->
+  <div id="instalarBox" class="aviso" hidden style="margin-bottom:12px">
+    <strong>Instalá la app en el teléfono</strong>
+    <span class="small">Queda un ícono en la pantalla y funciona sin internet.</span>
+    <button class="primary" id="btnInstalar" style="min-height:56px;font-size:1.1rem">Instalar</button>
+  </div>
+  <div id="copiaBox" class="aviso warn" hidden style="margin-bottom:12px">
+    <strong id="copiaTxt"></strong>
+    <span class="small">Mandale la planilla a Mario por WhatsApp para tener una copia.</span>
+    <button class="full" id="btnCopia">Mandar planilla ahora</button>
+  </div>
+  <section id="v-cargar" class="stack">
+    <div class="paso">
+      <h2>1. ¿Para quién trabajaste?</h2>
+      <div class="chips" id="chipsClientas"></div>
+      <div id="nuevaBox" class="stack" hidden style="margin-top:4px">
+        <label>Nombre<input id="nNombre" autocomplete="off" placeholder="Ej: Rosa"></label>
+        <label>WhatsApp (opcional)<input id="nTel" inputmode="tel" placeholder="Ej: 11 2345 6789"></label>
+        <label>Cobro por hora<input id="nPrecio" inputmode="numeric" placeholder="Ej: 5.000"></label>
+        <div class="row"><button id="nOk" class="full" style="flex:1;background:var(--ink-soft);border-color:var(--ink);color:var(--ink)">Agregar clienta</button><button id="nCancel" class="ghost">Cancelar</button></div>
+      </div>
+    </div>
+
+    <div class="paso">
+      <h2>2. ¿Qué día?</h2>
+      <div class="row">
+        <button class="chip" id="dHoy">Hoy</button>
+        <button class="chip" id="dAyer">Ayer</button>
+        <input type="date" id="fFecha" aria-label="Fecha">
+      </div>
+    </div>
+
+    <div class="paso">
+      <h2>3. ¿Cuántas horas?</h2>
+      <div class="stepper">
+        <button id="hMenos" aria-label="Media hora menos">−½</button>
+        <output id="hOut">2 h</output>
+        <button id="hMas" aria-label="Media hora más">+½</button>
+      </div>
+      <div class="chips" id="chipsHoras"></div>
+    </div>
+
+    <div class="paso">
+      <h2>4. Cobro por hora</h2>
+      <input id="fPrecio" inputmode="numeric" placeholder="Ej: 5.000" aria-label="Cobro por hora">
+    </div>
+
+    <div class="total"><span>Total a cobrar</span><strong id="fTotal">$ 0</strong></div>
+    <button class="primary" id="btnGuardar">Guardar</button>
+  </section>
+
+  <!-- CUENTAS -->
+  <section id="v-cuentas" class="stack" hidden></section>
+
+  <!-- DETALLE CLIENTA -->
+  <section id="v-clienta" class="stack" hidden></section>
+
+  <!-- EXCEL -->
+  <section id="v-excel" class="stack" hidden>
+    <div class="paso">
+      <h2>Mandar la planilla</h2>
+      <p class="muted" style="margin:0" id="xInfo"></p>
+      <button class="primary" id="xMandar">Mandar planilla Excel</button>
+      <p class="small muted" style="margin:0">Se abre el menú de compartir del teléfono: elegí WhatsApp y mandásela a Mario, o guardala en Drive. Así queda una copia por si se pierde el teléfono.</p>
+      <button class="full" id="xBajar">Guardar en el teléfono (Descargas)</button>
+    </div>
+    <div class="paso">
+      <h2>Recuperar desde Excel</h2>
+      <p class="small muted" style="margin:0">Si cambiás de teléfono o se borraron los datos, elegí la última planilla que mandaste o guardaste y la app vuelve a cargar todo.</p>
+      <label class="btn full" for="xArchivo" style="display:flex">Elegir planilla</label>
+      <input type="file" id="xArchivo" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+      <div id="xConfirm"></div>
+    </div>
+    <p class="small muted">Los datos se guardan en este teléfono, aunque no haya internet.</p>
+  </section>
+</div>
+
+<nav class="tabs" aria-label="Secciones">
+  <button data-tab="cargar" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Cargar</button>
+  <button data-tab="cuentas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Cuentas</button>
+  <button data-tab="excel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M4 15h16M10 3v18"/></svg>Excel</button>
+</nav>
+<div id="toast" hidden></div>
+
+<script>
+(function(){
+const KEY='cuadernoHoras_v1';
+let D={clientas:[],registros:[],precioBase:0,ultimaDescarga:null};
+try{const s=localStorage.getItem(KEY); if(s) D=Object.assign(D,JSON.parse(s));}catch(e){}
+function guardar(){setTimeout(pintarAvisos,0);try{localStorage.setItem(KEY,JSON.stringify(D));return true}catch(e){toast('No se pudo guardar en este teléfono. Descargá el Excel.');return false}}
+
+const $=id=>document.getElementById(id);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const plata=n=>'$\u00a0'+Math.round(n||0).toLocaleString('es-AR');
+const num=s=>Number(String(s??'').replace(/[^\d]/g,''))||0;
+function horas(h){h=Math.round((h||0)*60);const H=Math.floor(h/60),m=h%60;if(!m)return H+' h';return H?`${H} h ${m} min`:`${m} min`}
+const pad=n=>String(n).padStart(2,'0');
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const deISO=s=>{const[a,b,c]=s.split('-').map(Number);return new Date(a,b-1,c,12)};
+const DIAS=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+const fechaLarga=s=>{const d=deISO(s);return `${DIAS[d.getDay()]} ${pad(d.getDate())}/${pad(d.getMonth()+1)}`};
+const clienta=id=>D.clientas.find(c=>c.id===id);
+const regsDe=(id,cobrado)=>D.registros.filter(r=>r.clientaId===id&&!!r.cobrado===cobrado).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+
+let tt;function toast(t){const el=$('toast');el.textContent=t;el.hidden=false;clearTimeout(tt);tt=setTimeout(()=>el.hidden=true,2600)}
+
+const hoy=new Date();
+$('hoyTxt').textContent=DIAS[hoy.getDay()]+' '+hoy.getDate()+'/'+(hoy.getMonth()+1);
+
+/* ---------- CARGAR ---------- */
+const F={clientaId:null,fecha:iso(hoy),horas:2,precio:D.precioBase||0};
+function pintarChips(){
+  const box=$('chipsClientas');
+  const orden=[...D.clientas].sort((a,b)=>(b.uso||0)-(a.uso||0));
+  box.innerHTML=orden.map(c=>`<button class="chip" data-c="${c.id}" aria-pressed="${c.id===F.clientaId}">${esc(c.nombre)}</button>`).join('')+
+    `<button class="chip nueva" id="btnNueva">+ Nueva clienta</button>`;
+}
+function pintarFecha(){
+  $('fFecha').value=F.fecha;
+  const ay=new Date(hoy);ay.setDate(ay.getDate()-1);
+  $('dHoy').setAttribute('aria-pressed',F.fecha===iso(hoy));
+  $('dAyer').setAttribute('aria-pressed',F.fecha===iso(ay));
+}
+function pintarHoras(){
+  $('hOut').textContent=horas(F.horas);
+  $('chipsHoras').innerHTML=[1,2,3,4,5,6,8].map(h=>`<button class="chip h" data-h="${h}" aria-pressed="${F.horas===h}">${h}</button>`).join('');
+  pintarTotal();
+}
+function pintarTotal(){$('fTotal').textContent=plata(F.horas*F.precio)}
+function pintarPrecio(){$('fPrecio').value=F.precio?F.precio.toLocaleString('es-AR'):''}
+
+$('chipsClientas').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.id==='btnNueva'){$('nuevaBox').hidden=false;$('nPrecio').value=F.precio?F.precio.toLocaleString('es-AR'):'';$('nNombre').focus();return}
+  F.clientaId=b.dataset.c;const c=clienta(F.clientaId);
+  if(c&&c.precio){F.precio=c.precio;pintarPrecio()}
+  pintarChips();pintarTotal();
+});
+$('nCancel').onclick=()=>{$('nuevaBox').hidden=true};
+$('nOk').onclick=()=>{
+  const nombre=$('nNombre').value.trim();
+  if(!nombre){toast('Escribí el nombre de la clienta');$('nNombre').focus();return}
+  const ya=D.clientas.find(c=>c.nombre.toLowerCase()===nombre.toLowerCase());
+  if(ya){F.clientaId=ya.id}else{
+    const c={id:uid(),nombre,tel:$('nTel').value.trim(),precio:num($('nPrecio').value)||F.precio||0,uso:0};
+    D.clientas.push(c);F.clientaId=c.id;guardar();
+  }
+  const c=clienta(F.clientaId);if(c.precio){F.precio=c.precio;pintarPrecio()}
+  $('nNombre').value='';$('nTel').value='';$('nuevaBox').hidden=true;pintarChips();pintarTotal();
+};
+$('dHoy').onclick=()=>{F.fecha=iso(hoy);pintarFecha()};
+$('dAyer').onclick=()=>{const a=new Date(hoy);a.setDate(a.getDate()-1);F.fecha=iso(a);pintarFecha()};
+$('fFecha').onchange=e=>{if(e.target.value){F.fecha=e.target.value;pintarFecha()}};
+$('hMenos').onclick=()=>{F.horas=Math.max(.5,F.horas-.5);pintarHoras()};
+$('hMas').onclick=()=>{F.horas=Math.min(24,F.horas+.5);pintarHoras()};
+$('chipsHoras').addEventListener('click',e=>{const b=e.target.closest('[data-h]');if(b){F.horas=Number(b.dataset.h);pintarHoras()}});
+$('fPrecio').addEventListener('input',e=>{F.precio=num(e.target.value);pintarTotal()});
+$('fPrecio').addEventListener('blur',pintarPrecio);
+$('btnGuardar').onclick=()=>{
+  if(!F.clientaId){toast('Primero elegí para quién trabajaste');return}
+  if(!F.precio){toast('Falta el cobro por hora');$('fPrecio').focus();return}
+  const c=clienta(F.clientaId);
+  D.registros.push({id:uid(),clientaId:c.id,fecha:F.fecha,horas:F.horas,precio:F.precio,cobrado:false});
+  c.precio=F.precio;c.uso=(c.uso||0)+1;D.precioBase=F.precio;
+  if(guardar())toast(`Guardado: ${horas(F.horas)} para ${c.nombre} (${plata(F.horas*F.precio)})`);
+  F.clientaId=null;F.fecha=iso(hoy);pintarChips();pintarFecha();
+};
+
+/* ---------- CUENTAS ---------- */
+function resumen(c){const p=regsDe(c.id,false);return{dias:p.length,h:p.reduce((s,r)=>s+r.horas,0),t:p.reduce((s,r)=>s+r.horas*r.precio,0)}}
+function pintarCuentas(){
+  const v=$('v-cuentas');
+  if(!D.clientas.length){v.innerHTML=`<div class="vacio"><b>Todavía no hay horas cargadas</b>Andá a <strong>Cargar</strong>, elegí la clienta y las horas, y tocá Guardar.</div>`;return}
+  const lista=D.clientas.map(c=>({c,...resumen(c)})).sort((a,b)=>b.t-a.t||a.c.nombre.localeCompare(b.c.nombre));
+  const tot=lista.reduce((s,x)=>s+x.t,0);
+  v.innerHTML=`<div class="total"><span>Todo lo que falta cobrar</span><strong>${plata(tot)}</strong></div>
+  <h2>Tocá una clienta para ver el detalle y mandarle la cuenta</h2>`+
+  lista.map(x=>`<button class="cuenta ${x.t?'':'aldia'}" data-c="${x.c.id}">
+    <span class="n">${esc(x.c.nombre)}</span><span class="m">${x.t?plata(x.t):'Al día'}</span>
+    <span class="d">${x.t?`${horas(x.h)} en ${x.dias} ${x.dias===1?'día':'días'} · <span class="pill pend">Por cobrar</span>`:'<span class="pill">Sin deuda</span>'}</span></button>`).join('');
+}
+$('v-cuentas').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(b)abrirClienta(b.dataset.c)});
+
+/* ---------- DETALLE ---------- */
+let actual=null,confirmBorrar=null,confirmCobro=false;
+function telWA(t){let d=String(t||'').replace(/\D/g,'');if(!d)return'';d=d.replace(/^0+/,'');
+  if(d.startsWith('54')){if(!d.startsWith('549'))d='549'+d.slice(2);return d}return '549'+d}
+function mensaje(c,p){
+  const h=p.reduce((s,r)=>s+r.horas,0),t=p.reduce((s,r)=>s+r.horas*r.precio,0);
+  const precios=[...new Set(p.map(r=>r.precio))];
+  const lineas=p.map(r=>`• ${fechaLarga(r.fecha)}: ${horas(r.horas)}`+(precios.length>1?` (${plata(r.horas*r.precio)})`:'')).join('\n');
+  return `Hola ${c.nombre}! Te paso el detalle de las horas trabajadas:\n\n${lineas}\n\nTotal: ${horas(h)}`+
+    (precios.length===1?` x ${plata(precios[0])} la hora`:'')+` = ${plata(t)}\n\n¡Muchas gracias!`;
+}
+function abrirClienta(id){actual=id;confirmBorrar=null;confirmCobro=false;mostrar('clienta')}
+function pintarClienta(){
+  const v=$('v-clienta'),c=clienta(actual);if(!c){mostrar('cuentas');return}
+  const p=regsDe(c.id,false),co=regsDe(c.id,true).reverse();
+  const h=p.reduce((s,r)=>s+r.horas,0),t=p.reduce((s,r)=>s+r.horas*r.precio,0);
+  const fila=(r,borrable)=>confirmBorrar===r.id?
+    `<div class="dia confirm"><div>¿Borrar ${fechaLarga(r.fecha)} (${horas(r.horas)})?</div><div class="row"><button class="danger" data-si="${r.id}">Sí, borrar</button><button data-no>No</button></div></div>`:
+    `<div class="dia"><span class="f">${fechaLarga(r.fecha)}<small>${plata(r.precio)} la hora</small></span><span class="p">${horas(r.horas)}</span>
+     <span style="display:flex;align-items:center;gap:6px"><span class="p">${plata(r.horas*r.precio)}</span>${borrable?`<button class="x" data-b="${r.id}" aria-label="Borrar este día">✕</button>`:''}</span></div>`;
+  const tel=telWA(c.tel),msg=p.length?mensaje(c,p):'';
+  const wa=`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
+  v.innerHTML=`<button class="back" data-volver>← Volver a cuentas</button>
+  <h1 style="font-size:2.1rem">${esc(c.nombre)}</h1>`+
+  (p.length?`
+  <div class="dias">${p.map(r=>fila(r,true)).join('')}<div class="sumario"><span>Total ${horas(h)}</span><span>${plata(t)}</span></div></div>
+  <h2>Mensaje que se va a mandar</h2>
+  <div class="msg">${esc(msg)}</div>
+  <a class="btn wa" href="${wa}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+  <button class="full" data-copiar>Copiar el mensaje</button>
+  ${!tel?'<p class="small muted" style="margin:0">No tiene teléfono cargado: WhatsApp te va a pedir que elijas el contacto. Podés agregarlo abajo en "Datos de la clienta".</p>':''}
+  ${confirmCobro?`<div class="confirmbox"><strong>¿${esc(c.nombre)} ya te pagó ${plata(t)}?</strong><span class="small">Estos días pasan a "Ya cobrado" y la cuenta queda en cero.</span>
+    <div class="row"><button class="wa" style="flex:1;min-height:52px;font-size:1rem" data-cobrado>Sí, ya me pagó</button><button data-nocobro>No</button></div></div>`
+   :`<button class="full" data-pago>Ya me pagó</button>`}`
+  :`<div class="vacio"><b>No te debe nada</b>Cuando cargues horas nuevas para ${esc(c.nombre)} van a aparecer acá.</div>`)+
+  `<details><summary>Datos de la clienta</summary><div class="stack" style="margin-top:0">
+    <label>Nombre<input id="eNombre" value="${esc(c.nombre)}"></label>
+    <label>WhatsApp<input id="eTel" inputmode="tel" value="${esc(c.tel||'')}" placeholder="Ej: 11 2345 6789"></label>
+    <label>Cobro por hora<input id="ePrecio" inputmode="numeric" value="${c.precio?c.precio.toLocaleString('es-AR'):''}"></label>
+    <button data-guardarc>Guardar cambios</button></div></details>`+
+  (co.length?`<details><summary>Ya cobrado (${co.length} ${co.length===1?'día':'días'})</summary><div class="dias">${co.map(r=>fila(r,false)).join('')}</div></details>`:'');
+}
+$('v-clienta').addEventListener('click',async e=>{
+  const b=e.target.closest('button');if(!b)return;const d=b.dataset;const c=clienta(actual);
+  if('volver' in d){mostrar('cuentas');return}
+  if(d.b){confirmBorrar=d.b;pintarClienta();return}
+  if('no' in d){confirmBorrar=null;pintarClienta();return}
+  if(d.si){D.registros=D.registros.filter(r=>r.id!==d.si);confirmBorrar=null;guardar();toast('Día borrado');pintarClienta();return}
+  if('pago' in d){confirmCobro=true;pintarClienta();return}
+  if('nocobro' in d){confirmCobro=false;pintarClienta();return}
+  if('cobrado' in d){const f=iso(new Date());D.registros.forEach(r=>{if(r.clientaId===c.id&&!r.cobrado){r.cobrado=true;r.fechaCobro=f}});confirmCobro=false;guardar();toast(`Listo, ${c.nombre} quedó al día`);pintarClienta();return}
+  if('copiar' in d){const t=mensaje(c,regsDe(c.id,false));try{await navigator.clipboard.writeText(t);toast('Mensaje copiado. Pegalo en WhatsApp.')}catch(err){const m=document.querySelector('#v-clienta .msg');const r=document.createRange();r.selectNodeContents(m);const s=getSelection();s.removeAllRanges();s.addRange(r);toast('Mantené apretado el texto para copiarlo')}return}
+  if('guardarc' in d){const n=$('eNombre').value.trim();if(n)c.nombre=n;c.tel=$('eTel').value.trim();c.precio=num($('ePrecio').value);guardar();toast('Datos guardados');pintarClienta();pintarChips()}
+});
+
+/* ---------- EXCEL ---------- */
+function pintarExcel(){
+  const n=D.registros.length;
+  $('xInfo').textContent=n?`En este teléfono hay ${n} ${n===1?'día cargado':'días cargados'} de ${D.clientas.length} ${D.clientas.length===1?'clienta':'clientas'}.`+(D.ultimaDescarga?` Última copia: ${fechaLarga(D.ultimaDescarga)}.`:' Todavía no mandaste ninguna planilla.'):'Todavía no hay horas cargadas.';
+}
+function armarLibro(){
+  const wb=XLSX.utils.book_new();
+  const regs=[...D.registros].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  const filas=[['Fecha','Día','Clienta','Horas','Cobro por hora','Total','Estado','Fecha de cobro']];
+  regs.forEach(r=>{const c=clienta(r.clientaId)||{nombre:'?'};const d=deISO(r.fecha);
+    filas.push([d,DIAS[d.getDay()],c.nombre,r.horas,r.precio,r.horas*r.precio,r.cobrado?'Cobrado':'Por cobrar',r.fechaCobro?deISO(r.fechaCobro):''])});
+  const ws=XLSX.utils.aoa_to_sheet(filas,{cellDates:true});
+  for(let i=2;i<=filas.length;i++){const a='F'+i;if(ws[a])ws[a].f=`D${i}*E${i}`;
+    ['A'+i,'H'+i].forEach(k=>{if(ws[k]&&ws[k].t==='d')ws[k].z='dd/mm/yyyy'});
+    ['E'+i,'F'+i].forEach(k=>{if(ws[k])ws[k].z='"$" #,##0'})}
+  ws['!cols']=[{wch:12},{wch:11},{wch:20},{wch:8},{wch:15},{wch:13},{wch:12},{wch:14}];
+  ws['!autofilter']={ref:`A1:H${filas.length}`};
+  XLSX.utils.book_append_sheet(wb,ws,'Horas');
+  const res=[['Clienta','Horas por cobrar','Monto por cobrar','Horas totales','Monto total']];
+  D.clientas.forEach(c=>{const all=D.registros.filter(r=>r.clientaId===c.id),p=all.filter(r=>!r.cobrado);
+    res.push([c.nombre,p.reduce((s,r)=>s+r.horas,0),p.reduce((s,r)=>s+r.horas*r.precio,0),all.reduce((s,r)=>s+r.horas,0),all.reduce((s,r)=>s+r.horas*r.precio,0)])});
+  const n=res.length;res.push(['TOTAL',0,0,0,0]);
+  const wr=XLSX.utils.aoa_to_sheet(res);
+  ['B','C','D','E'].forEach(col=>{const k=col+(n+1);wr[k]={t:'n',f:`SUM(${col}2:${col}${n})`,v:res.slice(1,n).reduce((s,r)=>s+r['BCDE'.indexOf(col)+1],0)}});
+  for(let i=2;i<=n+1;i++)['C','E'].forEach(col=>{if(wr[col+i])wr[col+i].z='"$" #,##0'});
+  wr['!cols']=[{wch:20},{wch:16},{wch:17},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,wr,'Resumen');
+  const cl=[['Clienta','WhatsApp','Cobro por hora']].concat(D.clientas.map(c=>[c.nombre,c.tel||'',c.precio||0]));
+  const wc=XLSX.utils.aoa_to_sheet(cl);wc['!cols']=[{wch:20},{wch:18},{wch:15}];
+  XLSX.utils.book_append_sheet(wb,wc,'Clientas');
+  return wb;
+}
+function blobExcel(){const out=XLSX.write(armarLibro(),{bookType:'xlsx',type:'array'});return new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
+const nombreXlsx=()=>`Horas trabajadas ${iso(new Date())}.xlsx`;
+function marcarCopia(){D.ultimaDescarga=iso(new Date());guardar();pintarExcel();pintarAvisos()}
+function descargar(blob,nombre){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nombre;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+async function mandarPlanilla(){
+  if(!D.registros.length){toast('Todavía no hay horas para mandar');return}
+  const nombre=nombreXlsx(),blob=blobExcel();
+  const file=new File([blob],nombre,{type:blob.type});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:'Horas trabajadas',text:'Planilla de horas trabajadas'});marcarCopia();toast('Planilla lista')}
+    catch(e){if(e&&e.name!=='AbortError'){descargar(blob,nombre);marcarCopia();toast('Se guardó en Descargas')}}
+  }else{descargar(blob,nombre);marcarCopia();toast('Se guardó en Descargas')}
+}
+$('xMandar').onclick=mandarPlanilla;
+$('btnCopia').onclick=mandarPlanilla;
+$('xBajar').onclick=()=>{if(!D.registros.length){toast('Todavía no hay horas para guardar');return}descargar(blobExcel(),nombreXlsx());marcarCopia();toast('Se guardó en Descargas')};
+
+/* Aviso de copia: si pasaron 7 días o más desde la última */
+function pintarAvisos(){
+  const n=D.registros.length;let dias=null;
+  if(D.ultimaDescarga)dias=Math.floor((deISO(iso(new Date()))-deISO(D.ultimaDescarga))/864e5);
+  const mostrar=n>=3&&(dias===null||dias>=7);
+  $('copiaBox').hidden=!mostrar;
+  if(mostrar)$('copiaTxt').textContent=dias===null?'Todavía no hiciste ninguna copia':`Hace ${dias} días que no hacés una copia`;
+}
+
+/* Instalar */
+let pedidoInstalar=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();pedidoInstalar=e;$('instalarBox').hidden=false});
+window.addEventListener('appinstalled',()=>{$('instalarBox').hidden=true;toast('App instalada')});
+$('btnInstalar').onclick=async()=>{if(!pedidoInstalar)return;pedidoInstalar.prompt();try{await pedidoInstalar.userChoice}catch(e){}pedidoInstalar=null;$('instalarBox').hidden=true};
+if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
+
+let pendiente=null;
+$('xArchivo').onchange=e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  const rd=new FileReader();rd.onload=()=>{
+    try{
+      const wb=XLSX.read(rd.result,{type:'array',cellDates:true});
+      const h=wb.Sheets['Horas'];if(!h)throw 0;
+      const filas=XLSX.utils.sheet_to_json(h);
+      const cl=wb.Sheets['Clientas']?XLSX.utils.sheet_to_json(wb.Sheets['Clientas']):[];
+      const clientas=[],porNombre={};
+      const getC=n=>{n=String(n||'').trim();const k=n.toLowerCase();if(!porNombre[k]){porNombre[k]={id:uid(),nombre:n,tel:'',precio:0,uso:0};clientas.push(porNombre[k])}return porNombre[k]};
+      cl.forEach(r=>{const c=getC(r['Clienta']);c.tel=String(r['WhatsApp']||'');c.precio=Number(r['Cobro por hora'])||0});
+      const aISO=v=>v instanceof Date?iso(new Date(v.getTime()+12*3600e3)):(typeof v==='number'?iso(new Date(Math.round((v-25569)*864e5)+12*3600e3)):String(v||'').slice(0,10));
+      const registros=filas.filter(r=>r['Clienta']&&r['Horas']).map(r=>{const c=getC(r['Clienta']);c.uso++;
+        return{id:uid(),clientaId:c.id,fecha:aISO(r['Fecha']),horas:Number(r['Horas']),precio:Number(r['Cobro por hora'])||0,cobrado:r['Estado']==='Cobrado',fechaCobro:r['Fecha de cobro']?aISO(r['Fecha de cobro']):undefined}});
+      pendiente={clientas,registros};
+      $('xConfirm').innerHTML=`<div class="confirmbox"><strong>La planilla tiene ${registros.length} días de ${clientas.length} clientas.</strong><span class="small">Esto reemplaza lo que hay ahora en el teléfono.</span><div class="row"><button class="danger" style="flex:1" id="xSi">Reemplazar</button><button id="xNo">Cancelar</button></div></div>`;
+    }catch(err){$('xConfirm').innerHTML='';toast('Ese archivo no es una planilla de esta app')}
+  };rd.readAsArrayBuffer(f);
+};
+$('xConfirm').addEventListener('click',e=>{
+  if(e.target.id==='xSi'&&pendiente){D.clientas=pendiente.clientas;D.registros=pendiente.registros;guardar();pendiente=null;$('xConfirm').innerHTML='';pintarChips();pintarExcel();toast('Datos recuperados')}
+  if(e.target.id==='xNo'){pendiente=null;$('xConfirm').innerHTML=''}
+});
+
+/* ---------- NAVEGACIÓN ---------- */
+function mostrar(v){
+  ['cargar','cuentas','clienta','excel'].forEach(x=>$('v-'+x).hidden=x!==v);
+  const tab=v==='clienta'?'cuentas':v;
+  document.querySelectorAll('nav.tabs button').forEach(b=>{if(b.dataset.tab===tab)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
+  if(v==='cuentas')pintarCuentas();if(v==='clienta')pintarClienta();if(v==='excel')pintarExcel();pintarAvisos();
+  window.scrollTo(0,0);
+}
+document.querySelector('nav.tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(b)mostrar(b.dataset.tab)});
+
+pintarChips();pintarFecha();pintarHoras();pintarPrecio();pintarAvisos();
+})();
+</script>
+</body>
+</html>
