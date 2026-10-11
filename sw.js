@@ -1,6 +1,6 @@
 // Cuaderno de Horas — funciona sin internet.
 // Al cambiar cualquier archivo de la app, subí el número de versión.
-const VERSION = 'cuaderno-v2';
+const VERSION = 'cuaderno-v3';
 const ARCHIVOS = [
   './', 'index.html', 'manifest.webmanifest', 'xlsx.full.min.js',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-180.png',

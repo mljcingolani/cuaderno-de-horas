@@ -99,6 +99,12 @@ input{font:inherit;font-size:1.1rem;padding:12px 14px;border-radius:12px;border:
 .dia .f{font-weight:700;text-transform:capitalize;min-width:0}
 .dia .f small{display:block;font-weight:600;color:var(--muted);text-transform:none}
 .dia .p{font-weight:800}
+.dia[data-e]{cursor:pointer}
+.dia[data-e]:active{background:var(--ink-soft)}
+.dia.editar{grid-template-columns:1fr;gap:12px;background:var(--ink-soft);padding:16px}
+.dia.editar strong{font-family:var(--f-display);font-size:1.2rem}
+.dia.editar .row button{flex:1}
+#chipsHoras{display:grid;grid-template-columns:repeat(4,1fr)}
 .dia .x{min-height:44px;min-width:44px;padding:0;border-color:transparent;color:var(--muted);background:transparent}
 .dia.confirm{grid-template-columns:1fr;background:var(--warn-soft)}
 .dia.confirm .row button{flex:1}
@@ -272,7 +278,7 @@ function pintarFecha(){
 }
 function pintarHoras(){
   $('hOut').textContent=horas(F.horas);
-  $('chipsHoras').innerHTML=[1,2,3,4,5,6,8].map(h=>`<button class="chip h" data-h="${h}" aria-pressed="${F.horas===h}">${h}</button>`).join('');
+  $('chipsHoras').innerHTML=[1,2,3,4,5,6,7,8].map(h=>`<button class="chip h" data-h="${h}" aria-pressed="${F.horas===h}">${h}</button>`).join('');
   pintarTotal();
 }
 function pintarTotal(){$('fTotal').textContent=plata(F.horas*F.precio)}
@@ -331,7 +337,7 @@ function pintarCuentas(){
 $('v-cuentas').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(b)abrirClienta(b.dataset.c)});
 
 /* ---------- DETALLE ---------- */
-let actual=null,confirmBorrar=null,confirmCobro=false;
+let actual=null,confirmBorrar=null,confirmCobro=false,editando=null,EH=0;
 function telWA(t){let d=String(t||'').replace(/\D/g,'');if(!d)return'';d=d.replace(/^0+/,'');
   if(d.startsWith('54')){if(!d.startsWith('549'))d='549'+d.slice(2);return d}return '549'+d}
 function mensaje(c,p){
@@ -341,20 +347,29 @@ function mensaje(c,p){
   return `Hola ${c.nombre}! Te paso el detalle de las horas trabajadas:\n\n${lineas}\n\nTotal: ${horas(h)}`+
     (precios.length===1?` x ${plata(precios[0])} la hora`:'')+` = ${plata(t)}\n\n¡Muchas gracias!`;
 }
-function abrirClienta(id){actual=id;confirmBorrar=null;confirmCobro=false;mostrar('clienta')}
+function abrirClienta(id){actual=id;confirmBorrar=null;confirmCobro=false;editando=null;mostrar('clienta')}
 function pintarClienta(){
   const v=$('v-clienta'),c=clienta(actual);if(!c){mostrar('cuentas');return}
   const p=regsDe(c.id,false),co=regsDe(c.id,true).reverse();
   const h=p.reduce((s,r)=>s+r.horas,0),t=p.reduce((s,r)=>s+r.horas*r.precio,0);
-  const fila=(r,borrable)=>confirmBorrar===r.id?
+  const editor=r=>`<div class="dia editar"><strong>Corregir ${fechaLarga(r.fecha)}</strong>
+    <label>Día<input type="date" id="edFecha" value="${r.fecha}"></label>
+    <div style="display:grid;gap:6px"><span style="font-weight:700">Horas</span>
+    <div class="stepper"><button data-em aria-label="Media hora menos">−½</button><output id="edH">${horas(EH)}</output><button data-ep aria-label="Media hora más">+½</button></div></div>
+    <label>Cobro por hora<input id="edPrecio" inputmode="numeric" value="${r.precio.toLocaleString('es-AR')}"></label>
+    <div class="total" style="padding:10px 14px"><span>Total</span><strong id="edTotal" style="font-size:1.6rem">${plata(EH*r.precio)}</strong></div>
+    <div class="row"><button class="primary" style="min-height:56px;font-size:1.1rem" data-eguardar="${r.id}">Guardar</button><button data-ecancel>Cancelar</button></div>
+    <button class="danger full" data-b="${r.id}">Borrar este día</button></div>`;
+  const fila=(r,borrable)=>editando===r.id&&confirmBorrar!==r.id?editor(r):confirmBorrar===r.id?
     `<div class="dia confirm"><div>¿Borrar ${fechaLarga(r.fecha)} (${horas(r.horas)})?</div><div class="row"><button class="danger" data-si="${r.id}">Sí, borrar</button><button data-no>No</button></div></div>`:
-    `<div class="dia"><span class="f">${fechaLarga(r.fecha)}<small>${plata(r.precio)} la hora</small></span><span class="p">${horas(r.horas)}</span>
+    `<div class="dia" data-e="${r.id}" role="button" tabindex="0" aria-label="Corregir ${fechaLarga(r.fecha)}"><span class="f">${fechaLarga(r.fecha)}<small>${plata(r.precio)} la hora</small></span><span class="p">${horas(r.horas)}</span>
      <span style="display:flex;align-items:center;gap:6px"><span class="p">${plata(r.horas*r.precio)}</span>${borrable?`<button class="x" data-b="${r.id}" aria-label="Borrar este día">✕</button>`:''}</span></div>`;
   const tel=telWA(c.tel),msg=p.length?mensaje(c,p):'';
   const wa=`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
   v.innerHTML=`<button class="back" data-volver>← Volver a cuentas</button>
   <h1 style="font-size:2.1rem">${esc(c.nombre)}</h1>`+
   (p.length?`
+  <p class="small muted" style="margin:0">Tocá un día para corregirlo.</p>
   <div class="dias">${p.map(r=>fila(r,true)).join('')}<div class="sumario"><span>Total ${horas(h)}</span><span>${plata(t)}</span></div></div>
   <h2>Mensaje que se va a mandar</h2>
   <div class="msg">${esc(msg)}</div>
@@ -372,10 +387,24 @@ function pintarClienta(){
     <button data-guardarc>Guardar cambios</button></div></details>`+
   (co.length?`<details><summary>Ya cobrado (${co.length} ${co.length===1?'día':'días'})</summary><div class="dias">${co.map(r=>fila(r,false)).join('')}</div></details>`:'');
 }
+function abrirEditor(id){const r=D.registros.find(x=>x.id===id);if(!r)return;editando=id;confirmBorrar=null;EH=r.horas;pintarClienta();
+  const el=document.querySelector('#v-clienta .dia.editar');if(el)el.scrollIntoView({block:'center',behavior:'smooth'})}
+function totalEditor(){const pr=num($('edPrecio').value);$('edH').textContent=horas(EH);$('edTotal').textContent=plata(EH*pr)}
+$('v-clienta').addEventListener('input',e=>{if(e.target.id==='edPrecio')totalEditor()});
+$('v-clienta').addEventListener('keydown',e=>{const f=e.target.closest&&e.target.closest('[data-e]');if(f&&(e.key==='Enter'||e.key===' ')){e.preventDefault();abrirEditor(f.dataset.e)}});
 $('v-clienta').addEventListener('click',async e=>{
-  const b=e.target.closest('button');if(!b)return;const d=b.dataset;const c=clienta(actual);
+  const b=e.target.closest('button');
+  if(!b){const f=e.target.closest('[data-e]');if(f)abrirEditor(f.dataset.e);return}
+  const d=b.dataset;const c=clienta(actual);
+  if('em' in d){EH=Math.max(.5,EH-.5);totalEditor();return}
+  if('ep' in d){EH=Math.min(24,EH+.5);totalEditor();return}
+  if('ecancel' in d){editando=null;pintarClienta();return}
+  if(d.eguardar){const r=D.registros.find(x=>x.id===d.eguardar);if(!r)return;
+    const f=$('edFecha').value,pr=num($('edPrecio').value);
+    if(!f){toast('Elegí el día');return}if(!pr){toast('Falta el cobro por hora');return}
+    r.fecha=f;r.horas=EH;r.precio=pr;editando=null;guardar();toast(`Corregido: ${fechaLarga(f)}, ${horas(EH)}`);pintarClienta();return}
   if('volver' in d){mostrar('cuentas');return}
-  if(d.b){confirmBorrar=d.b;pintarClienta();return}
+  if(d.b){confirmBorrar=d.b;editando=null;pintarClienta();return}
   if('no' in d){confirmBorrar=null;pintarClienta();return}
   if(d.si){D.registros=D.registros.filter(r=>r.id!==d.si);confirmBorrar=null;guardar();toast('Día borrado');pintarClienta();return}
   if('pago' in d){confirmCobro=true;pintarClienta();return}
